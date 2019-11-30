@@ -5,129 +5,93 @@ rikudo(N,Pre,Links,Result):-
 		assert(bounds(19,4,2)),
 		assert(bounds(7,2,1)),
 
-		assert(n(N)),
-		assert(ok(false)),
+		%% store_pre(Pre,Visited),
+		find_start(N,Pre,X,Y),
+		update_links(Links,Links2),
+		solve(X,Y,N,1,[(0,0,-1)],Pre,Result,Links2),
+		check_links(Links,Result),
+		retractall(bounds(_,_,_)).
 
-		assert(point(0,0,'B',-1)),
-		store_points(Pre),
-		store_links(Links),
+%% find_start(N,[],-Y,Y):- bounds(N,_,Y).
+%% find_start(N,[(X,Y,_,1)|T],X,Y):-!.
+%% find_start(N,[(_,_,_,Num)|T],X,Y):-Num=\=1,find_start(N,T,X,Y).
 
-		point(X,Y,'B',1),
-
-		N1 is N-1,
-		generate(1,N1,All_nums),
-
-		solve(X,Y,N,All_nums),
-		output(Result).
-
-output(Result):-retrieve(Result).
-
-retrieve(L):-
-	(point(X,Y,C,Num) -> (retractall(point(X,Y,_,_)), retrieve(L1), L = [(X,Y,Num)|L1]) ; L = []).
+find_start(N,[],Y,-Y):- bounds(N,_,Y),!.
+find_start(N,[(X,Y,1)|T],X,Y):-!.
+find_start(N,[(_,_,Num)|T],X,Y):-Num=\=1,find_start(N,T,X,Y).
 
 
-store_points([]).
-store_points([(X,Y,Num)|T]):-
-		assert(point(X,Y,'B',Num)),
-		store_points(T).
+update_links([],[]):-!.
+update_links([(X1,Y1,X2,Y2)|T1], [(X1,Y1,X2,Y2),(X2,Y2,X1,Y1)|T2]):-
+		update_links(T1,T2).
 
-store_links([]).
-store_links([(X1,Y1,X2,Y2)|T]):-
-		assert(link(X1,Y1,X2,Y2,'N')),
-		assert(link(X2,Y2,X1,Y1,'N')),
-		store_links(T).
+check_links([],_):-!.
+check_links([(X1,Y1,X2,Y2)|T],Result):-
+		get_val(X1,Y1,Result,Num1),
+		get_val(X2,Y2,Result,Num2),
+		Temp is abs(Num1-Num2),
+		Temp =:= 1,
+		check_links(T,Result).
 
-app(X, L, [X|L]).
-generate(N2,N2,[N2|[]]).
-generate(N1,N2,L):-N1<N2,Newnum1 is (N1+1),generate(Newnum1,N2,L1),app(N1,L1,L).
+get_val(X,Y,[(X,Y,Num)|_],Num):-!.
+get_val(X,Y,[(_,_,_)|T],Num):-
+		get_val(X,Y,T,Num).
 
 
-%% Check cuts in this function
-solve(_, _, _, []):-
-	(ok(X),X==true -> fail;true),
-	retractall(ok(_)),
-	assert(ok(true)),
-	!.
+store_pre([],[(0,0,'B',-1)]).
+store_pre([(X,Y,Num)|T], [(X,Y,'B',Num)|TT]):-store_pre(T,TT).
 
-solve(X, Y, N, [Num|All_nums]):-
-	%% write(All_nums), write(X), nl, write(Y), nl, nl,
-	Xabs is abs(X),
-	Yabs is abs(Y),
-	Sum is (Xabs+Yabs),
-	
+%% if member 
+%% isMember([],X,Y, false, 'B', -2):-!.
+%% isMember([(X,Y,C,Num)|T],X,Y, true, C, Num):-!.
+%% isMember([(X1,Y1,_,_)|T],X,Y, TF, C, Num):-
+%% 		isMember(T,X,Y,TF,C,Num).
+
+
+isMember([(X,Y,_)|_],X,Y):-!.
+isMember([(_,_,_)|T],X,Y):-
+		isMember(T,X,Y).
+
+fulfilPre(X,Y,Curr,Curr,[]):-!.
+fulfilPre(X,Y,Curr,Curr1,[(X,Y,Curr1)|T]):-!.
+fulfilPre(X,Y,Curr,Req,[(X1,Y1,_)|T]):- fulfilPre(X,Y,Curr,Req,T).
+
+
+%% X, Y, N, Curr, Visited, Pre, Result
+solve(X, Y, N, N, Visited, Pre, Visited, Links2).
+solve(X, Y, N, Curr, Visited, Pre, Result, Links2):-
+
 	bounds(N, DiagBound, TopBottom),
+	(abs(X)+abs(Y) =< DiagBound),
+	Y =< TopBottom, Y >= -TopBottom,
 
-	%% Redundant checks.
-	(Sum > DiagBound -> fail ; true),
-	(Y > TopBottom -> fail ; true),
-	(Y < -TopBottom -> fail ; true),
-	(X=:=0, Y=:=0 -> fail ; true),
+	not(isMember(Visited,X,Y)),
+
+	fulfilPre(X, Y, Curr, Req, Pre),
+
+	Curr=:=Req,
+
+	N2 is Curr+1,
+	( isLink(X,Y,X2,Y2,Links2),not(isMember(Visited,X2,Y2)) -> (solve(X2,Y2,N,N2,[(X,Y,Curr)|Visited],Pre,Result,Links2)) ; (callnbrs(X,Y,N,N2,[(X,Y,Curr)|Visited],Pre,Result,Links2))).
+
 	
-	(point(X,Y,C,Given_Num) -> true ; (C = 'W', Given_Num is (-2))),
-	(Num =\= Given_Num, C=='B' -> fail ; true ),
-	(C=='G' -> fail ; true ),
-	%% (Num=:=Given_Num, C=='G' -> fail; true ),
-
-	(C=='W' -> (
-				retractall(point(X,Y,_,_)),
-				C1 = 'G',
-				assert(point(X,Y,C1,Num))
-				) 
-				; true ),
-
-	(
-		listing,
-		link(X,Y,Xv,Yv,'N') ->
-				(
-					retractall(link(X,Y,Xv,Yv,'N')),
-					retractall(link(Xv,Yv,X,Y,'N')),
-					assert(link(X,Y,Xv,Yv,'V')),
-					assert(link(Xv,Yv,X,Y,'V')),
-					write(X), nl, write(Y), nl, write(" "), nl, write(Xv), nl, write(Yv), nl, nl,
-					solve(Xv,Yv,N,All_nums),
-					retractall(link(X,Y,Xv,Yv,'V')),
-					retractall(link(Xv,Yv,X,Y,'V')),
-					assert(link(X,Y,Xv,Yv,'N')),
-					assert(link(Xv,Yv,X,Y,'N')),
-					write(X), nl, write(Y), nl, write(" "), nl, write(Xv), nl, write(Yv), nl, nl
-				)
-				;
-				(
-					(Xd is X-2, Temp2 is abs(Xd)+Yabs, Temp2 =< DiagBound, solve(Xd,Y,N,All_nums));
-					(Xd is X+2, Temp1 is abs(Xd)+Yabs, Temp1 =< DiagBound, solve(Xd,Y,N,All_nums));
-					(Xd is X-1, Yd is Y+1, Yd =< TopBottom, solve(Xd,Yd,N,All_nums));
-					(Xd is X+1, Yd is Y+1, Yd =< TopBottom, solve(Xd,Yd,N,All_nums));
-					(Xd is X-1, Yd is Y-1, Yd >= -TopBottom, solve(Xd,Yd,N,All_nums));
-					(Xd is X+1, Yd is Y-1, Yd >= -TopBottom, solve(Xd,Yd,N,All_nums));
-
-					(
-						C1=='G' -> (
-										retractall(point(X,Y,_,_)),
-										assert(point(X,Y,'W',Num)),
-										fail
-									) 
-									;
-									fail
-					)
-				)
-
-	),
-
-	(C1=='G' -> (
-				retractall(point(X,Y,_,_)),
-				assert(point(X,Y,'W',Num))
-				) 
-				; true ).
-	%% Put cut here.
+isLink(X1,Y1,X2,Y2,[(X1,Y1,X2,Y2)|_]):-!.
+isLink(X1,Y1,X2,Y2,[(_,_,_,_)|T]):-
+		isLink(X1,Y1,X2,Y2,T).
 
 
-%% Sample TestCases
-%% store_input(7,[(2,0,1)],[]).
-%% rikudo(7,[(2,0,1)],[],R).
-%% rikudo(37,[(2,0,1)],[],R).
-%% rikudo(19,[(2,0,1)],[(-1,-1,1,-1)],R).
-%% rik(19,[(2,0,1)],[(-1,-1,1,-1)],R).
-%% store_input(7,[(2,0,1),(1,-1,2)],[]).
+callnbrs(X,Y,N,Curr,Visited,Pre,Result,Links2):-
+	Xd is X+1, Yd is Y+1, solve(Xd,Yd,N,Curr,Visited,Pre,Result,Links2),!.
+callnbrs(X,Y,N,Curr,Visited,Pre,Result,Links2):-
+	Xd is X+2, solve(Xd,Y,N,Curr,Visited,Pre,Result,Links2),!.
+callnbrs(X,Y,N,Curr,Visited,Pre,Result,Links2):-
+	Xd is X+1, Yd is Y-1, solve(Xd,Yd,N,Curr,Visited,Pre,Result,Links2),!.
 
-%% store_input(37,[(4,0,12),(3,-1,1),(1,1,3),(2,2,5),(3,3,8),(-4,0,24),(-6,0,30),(-1,1,36),(1,-3,17),(-3,-3,27)],[]).
-%% rikudo(37,[(4,0,12),(3,-1,1),(1,1,3),(2,2,5),(3,3,8),(-4,0,24),(-6,0,30),(-1,1,36),(1,-3,17),(-3,-3,27)],[],R).
+callnbrs(X,Y,N,Curr,Visited,Pre,Result,Links2):-
+	Xd is X-1, Yd is Y+1, solve(Xd,Yd,N,Curr,Visited,Pre,Result,Links2),!.
+callnbrs(X,Y,N,Curr,Visited,Pre,Result,Links2):-
+	Xd is X-2, solve(Xd,Y,N,Curr,Visited,Pre,Result,Links2),!.
+callnbrs(X,Y,N,Curr,Visited,Pre,Result,Links2):-
+	Xd is X-1, Yd is Y-1, solve(Xd,Yd,N,Curr,Visited,Pre,Result,Links2),!.
+
+
